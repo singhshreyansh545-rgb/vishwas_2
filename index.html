@@ -1592,7 +1592,11 @@
       initApp();
     });
 
-    function initApp() {
+    async function initApp() {
+      // 1. Ensure initial sample blocks have valid mathematical SHA-256 hash chains
+      await verifyAndSeedInitialHashes();
+
+      // 2. Render application UI
       applyTranslations();
       renderDashboardStats();
       renderHierarchy();
@@ -1605,6 +1609,18 @@
       lucide.createIcons();
     }
 
+    async function verifyAndSeedInitialHashes() {
+      const approved = appState.transactions.filter(t => t.status === 'APPROVED');
+      let currentPrevHash = GENESIS_HASH;
+
+      for (let i = 0; i < approved.length; i++) {
+        const tx = approved[i];
+        tx.previousHash = currentPrevHash;
+        tx.blockHash = await computeTxPayloadHash(tx, currentPrevHash);
+        currentPrevHash = tx.blockHash;
+      }
+      saveState();
+    }
     /* ========================================================
        ROLE SWITCHING, FACE SCAN, & DUAL GOVERNANCE
        ======================================================== */
