@@ -2931,6 +2931,62 @@
         setTimeout(() => toast.remove(), 300);
       }, 3500);
     }
+    function printTransactionReceipt(txId) {
+      const txObj = appState.transactions.find(t => t.id === txId);
+      if (!txObj) return;
+      const member = appState.members.find(m => m.id === txObj.memberId) || { name: 'Member' };
+      const comm = appState.committees.find(c => c.id === txObj.committeeId) || { name: 'Committee' };
+
+      const typeName = t('opt_' + (txObj.type === 'SAVINGS' ? 'savings' : txObj.type === 'LOAN_DISBURSAL' ? 'loan_issue' : 'loan_repay'));
+
+      const receiptWindow = window.open('', '_blank', 'width=600,height=600');
+      
+      if (!receiptWindow) {
+        showToast('Popup blocked by browser! Please allow popups for this site.', 'error');
+        return;
+      }
+
+      receiptWindow.document.write(`
+        <html>
+        <head>
+          <title>VISHWAS Receipt - ${txObj.id}</title>
+          <style>
+            body { font-family: sans-serif; padding: 30px; color: #1e293b; }
+            .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; }
+            .title { font-size: 20px; font-weight: bold; color: #047857; margin: 0; }
+            .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #cbd5e1; font-size: 14px; }
+            .total { font-size: 18px; font-weight: bold; color: #0f172a; margin-top: 15px; }
+            .seal { margin-top: 30px; text-align: center; font-size: 12px; color: #059669; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2 class="title">${appState.lang === 'hi' ? 'विश्वास SHG लेजर रसीद' : 'VISHWAS SHG LEDGER RECEIPT'}</h2>
+            <p style="font-size: 12px; color: #64748b;">Government & SHG Dual-Key Certified Transaction</p>
+          </div>
+          <div style="margin-top: 20px;">
+            <div class="row"><span>${t('th_receipt')} / ${t('lbl_tx_id')}</span><strong>${txObj.id}</strong></div>
+            <div class="row"><span>${t('th_date_time')}:</span><span>${txObj.timestamp}</span></div>
+            <div class="row"><span>${t('th_member_name')}:</span><strong>${member.name}</strong></div>
+            <div class="row"><span>${t('lbl_comm_name')}:</span><span>${comm.name}</span></div>
+            <div class="row"><span>${t('th_category')}:</span><span>${typeName}</span></div>
+            <div class="row"><span>${t('th_pay_method')}:</span><span>${txObj.paymentMode}</span></div>
+            <div class="row"><span>Ledger Block Hash:</span><span style="font-family: monospace;">${txObj.blockHash}</span></div>
+            <div class="row total"><span>${t('lbl_total_settle')}</span><span>₹${Number(txObj.amount).toLocaleString('en-IN')}</span></div>
+          </div>
+          <div class="seal">
+            ✓ 2FA MANAGER PIN AUTHENTICATED & SEALED
+          </div>
+        </body>
+        </html>
+      `);
+      receiptWindow.document.close();
+
+      setTimeout(() => {
+        receiptWindow.focus();
+        receiptWindow.print();
+      }, 250);
+    }
   </script>
 </body>
 </html>
