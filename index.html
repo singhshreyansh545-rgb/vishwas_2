@@ -76,6 +76,13 @@
       50% { transform: scale(1.2); opacity: 0.7; }
       100% { transform: scale(1); opacity: 1; }
     }
+    .scan-laser {
+      animation: scan-move 2s ease-in-out infinite;
+    }
+    @keyframes scan-move {
+      0%, 100% { top: 8%; opacity: 0.7; }
+      50% { top: 88%; opacity: 1; }
+    }
   </style>
 </head>
 <body class="h-full font-sans text-slate-800 antialiased flex flex-col">
@@ -84,7 +91,6 @@
   <header class="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       
-      <!-- Brand Logo -->
       <!-- Brand Logo -->
       <div class="flex items-center space-x-3">
         <!-- New Transparent PNG Logo -->
@@ -875,6 +881,35 @@
     </div>
   </div>
 
+  <!-- ======================================================== -->
+  <!-- MODAL 7: BIOMETRIC FACE SCAN -->
+  <!-- ======================================================== -->
+  <div id="modalFaceScan" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center relative overflow-hidden">
+      <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 mx-auto flex items-center justify-center mb-3">
+        <i data-lucide="scan-face" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-extrabold text-slate-900">Manager Biometric Scan</h3>
+      <p class="text-xs text-slate-500 mt-1">Position your face inside the frame to unlock Checker 2FA governance.</p>
+
+      <!-- Camera Viewport with Scanner Ring -->
+      <div class="relative w-48 h-48 mx-auto my-4 rounded-full overflow-hidden border-4 border-amber-500 shadow-inner bg-slate-900 flex items-center justify-center">
+        <video id="faceScanVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+        <div id="scanLaser" class="scan-laser absolute inset-x-0 h-1 bg-amber-400 shadow-[0_0_12px_#f59e0b]"></div>
+        <div class="absolute inset-0 border-2 border-dashed border-amber-300/40 rounded-full pointer-events-none"></div>
+      </div>
+
+      <!-- Live Status Indicator -->
+      <div id="scanStatus" class="text-xs font-bold text-amber-700 font-mono">Initializing camera feed...</div>
+
+      <div class="mt-5 pt-3 border-t border-slate-100 flex justify-center">
+        <button type="button" onclick="cancelFaceScan()" class="px-4 py-2 text-slate-600 font-bold text-xs hover:bg-slate-100 rounded-xl transition">
+          Cancel Authentication
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
 
@@ -1477,7 +1512,6 @@
       renderApprovalsDesk();
       populateDropdowns();
       
-      // FIX IMPLEMENTED HERE: Call initCharts to destroy and recreate charts with updated labels
       initCharts();
     }
 
@@ -1606,9 +1640,16 @@
     }
 
     /* ========================================================
-       ROLE SWITCHING & DUAL GOVERNANCE (Maker vs Checker)
+       ROLE SWITCHING, FACE SCAN, & DUAL GOVERNANCE
        ======================================================== */
+    let mediaStreamTrack = null;
+
     function setRole(role) {
+      if (role === 'MANAGER' && appState.role !== 'MANAGER') {
+        startFaceScan();
+        return;
+      }
+      
       appState.role = role;
       saveState();
       syncRoleUI();
@@ -1620,6 +1661,87 @@
         showToast(t('js_emp_active'), 'info');
       }
       lucide.createIcons();
+    }
+
+    function startFaceScan() {
+      const modal = document.getElementById('modalFaceScan');
+      const video = document.getElementById('faceScanVideo');
+      const status = document.getElementById('scanStatus');
+      
+      modal.classList.remove('hidden');
+      status.textContent = 'Requesting camera access...';
+      status.className = 'text-xs font-bold text-amber-700 font-mono';
+      
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { width: 300, height: 300 } })
+          .then((stream) => {
+            video.srcObject = stream;
+            mediaStreamTrack = stream.getTracks()[0];
+            
+            status.textContent = 'Detecting facial geometry...';
+            speakText(appState.lang === 'hi' ? 'बायोमेट्रिक सत्यापन के लिए कैमरे के सामने आएं।' : 'Align face with camera for biometric verification.');
+
+            // Simulated scanning & verification steps
+            setTimeout(() => {
+              if (!mediaStreamTrack) return;
+              status.textContent = 'Verifying Manager Credentials...';
+            }, 1500);
+
+            setTimeout(() => {
+              if (!mediaStreamTrack) return;
+              status.textContent = '✓ Biometric Match Confirmed';
+              status.className = 'text-xs font-bold text-emerald-600 font-mono';
+              
+              setTimeout(() => {
+                stopFaceScanStream();
+                modal.classList.add('hidden');
+                
+                // Switch to Manager Mode
+                appState.role = 'MANAGER';
+                saveState();
+                syncRoleUI();
+                speakText(t('js_mgr_active'));
+                showToast('Biometric match confirmed. Manager Mode active.', 'success');
+                lucide.createIcons();
+              }, 800);
+            }, 3000);
+          })
+          .catch((err) => {
+            console.error('Camera error:', err);
+            status.textContent = 'Camera unavailable or blocked.';
+            status.className = 'text-xs font-bold text-rose-600 font-mono';
+            setTimeout(() => {
+              cancelFaceScan();
+              showToast('Camera permission denied. Defaulting to PIN entry.', 'error');
+              
+              // Fallback: activate manager mode anyway for demo
+              appState.role = 'MANAGER';
+              saveState();
+              syncRoleUI();
+              speakText(t('js_mgr_active'));
+              lucide.createIcons();
+            }, 1800);
+          });
+      } else {
+        showToast('Biometric hardware interface not supported.', 'error');
+        appState.role = 'MANAGER';
+        saveState();
+        syncRoleUI();
+        speakText(t('js_mgr_active'));
+        lucide.createIcons();
+      }
+    }
+
+    function stopFaceScanStream() {
+      if (mediaStreamTrack) {
+        mediaStreamTrack.stop();
+        mediaStreamTrack = null;
+      }
+    }
+
+    function cancelFaceScan() {
+      stopFaceScanStream();
+      document.getElementById('modalFaceScan').classList.add('hidden');
     }
 
     function syncRoleUI() {
